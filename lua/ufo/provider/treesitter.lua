@@ -8,24 +8,15 @@ local Treesitter = {
 }
 
 ---@diagnostic disable: deprecated
----@return vim.treesitter.LanguageTree|nil parser for the buffer, or nil if parser is not available
-local function getParser(bufnr, lang)
-    local ok, parser = pcall(vim.treesitter.get_parser, bufnr, lang)
-    if not ok then
-        return nil
-    end
+---@return LanguageTree|nil Get the parser, nil if parser is not available
+local function get_parser(bufnr, lang)
+    local parser = vim.F.npcall(vim.treesitter.get_parser, bufnr, lang)
     return parser
 end
 local get_query = assert(vim.treesitter.query.get or vim.treesitter.query.get_query)
 local get_query_files = assert(vim.treesitter.query.get_files or vim.treesitter.query.get_query_files)
 ---@diagnostic enable: deprecated
 
-
--- Backward compatibility for the dummy directive (#make-range!),
--- which no longer exists in nvim-treesitter v1.0+
-if not vim.tbl_contains(vim.treesitter.query.list_directives(), "make-range!") then
-    vim.treesitter.query.add_directive("make-range!", function() end, {})
-end
 
 local MetaNode = {}
 MetaNode.__index = MetaNode
@@ -39,6 +30,19 @@ end
 function MetaNode:range()
     local range = self.value
     return range[1], range[2], range[3], range[4]
+end
+
+--- Return a meta node that represents a range between two nodes, i.e., (#make-range!),
+--- that is similar to the legacy TSRange.from_node() from nvim-treesitter.
+function MetaNode.from_nodes(start_node, end_node)
+    local start_pos = { start_node:start() }
+    local end_pos = { end_node:end_() }
+    return MetaNode:new({
+        [1] = start_pos[1],
+        [2] = start_pos[2],
+        [3] = end_pos[1],
+        [4] = end_pos[2],
+    })
 end
 
 --- Return a meta node that represents a range between two nodes, i.e., (#make-range!),
@@ -161,7 +165,7 @@ function Treesitter.getFolds(bufnr)
     if self.hasProviders[ft] == false then
         error('UfoFallbackException')
     end
-    local parser = getParser(bufnr)
+    local parser = get_parser(bufnr)
     if not parser then
         self.hasProviders[ft] = false
         error('UfoFallbackException')
